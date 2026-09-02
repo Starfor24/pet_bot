@@ -21,11 +21,13 @@ async def init_db():
                 author_username TEXT,
                 animal_type TEXT,
                 breed_color TEXT,
+                pet_name TEXT,
                 sex TEXT,
                 age TEXT,
                 district TEXT,
                 location_detail TEXT,
                 event_date TEXT,
+                comment TEXT,
                 contact TEXT,
                 photos TEXT,
                 created_at TEXT,
@@ -34,6 +36,12 @@ async def init_db():
             )
             """
         )
+        # Миграция: добавляем новые колонки, если их нет в старой БД
+        for col in ("pet_name TEXT", "comment TEXT"):
+            try:
+                await db.execute(f"ALTER TABLE ads ADD COLUMN {col}")
+            except Exception:
+                pass  # колонка уже есть
         await db.commit()
 
 
@@ -44,9 +52,9 @@ async def create_ad(data: dict) -> int:
             """
             INSERT INTO ads (
                 kind, author_id, author_username, animal_type, breed_color,
-                sex, age, district, location_detail, event_date, contact,
-                photos, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                pet_name, sex, age, district, location_detail, event_date,
+                comment, contact, photos, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data.get("kind"),
@@ -54,11 +62,13 @@ async def create_ad(data: dict) -> int:
                 data.get("author_username"),
                 data.get("animal_type"),
                 data.get("breed_color"),
+                data.get("pet_name"),
                 data.get("sex"),
                 data.get("age"),
                 data.get("district"),
                 data.get("location_detail"),
                 data.get("event_date"),
+                data.get("comment"),
                 data.get("contact"),
                 json.dumps(data.get("photos", [])),
                 now,
@@ -110,9 +120,9 @@ async def search_ads(kind=None, animal_type=None, district=None, query=None, lim
         sql += " AND district = ?"
         params.append(district)
     if query:
-        sql += " AND (breed_color LIKE ? OR location_detail LIKE ? OR event_date LIKE ?)"
+        sql += " AND (breed_color LIKE ? OR location_detail LIKE ? OR event_date LIKE ? OR pet_name LIKE ? OR comment LIKE ?)"
         like = f"%{query}%"
-        params.extend([like, like, like])
+        params.extend([like, like, like, like, like])
 
     sql += " ORDER BY id DESC LIMIT ?"
     params.append(limit)

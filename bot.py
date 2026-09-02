@@ -149,14 +149,18 @@ def build_card_text(ad: dict) -> str:
     lines = [
         f"{kind} <b>{label}: {animal} {ad['breed_color'] or '—'}</b>",
         "",
-        f"📍 <b>Район:</b> {ad['district']}",
     ]
-    if ad["location_detail"]:
+    lines.append(f"📍 <b>Район:</b> {ad['district']}")
+    if ad.get("location_detail"):
         lines.append(f"🏷 <b>Место:</b> {ad['location_detail']}")
     lines.append(f"🗓 <b>Когда:</b> {ad['event_date']}")
-    lines.append(f"⚤ <b>Пол:</b> {SEX_LABELS.get(ad['sex'], '—')}")
-    if ad["age"]:
+    lines.append(f"⚤ <b>Пол:</b> {SEX_LABELS.get(ad.get('sex'), '—')}")
+    if ad.get("age"):
         lines.append(f"🎂 <b>Возраст:</b> {ad['age']}")
+    if ad.get("pet_name"):
+        lines.append(f"📛 <b>Кличка:</b> {ad['pet_name']}")
+    if ad.get("comment"):
+        lines.append(f"📝 <b>Комментарий:</b> {ad['comment']}")
     lines.append("")
     lines.append(f"👤 <b>Контакт:</b> {ad['contact']}")
 
@@ -310,6 +314,19 @@ async def step_age(message: Message, state: FSMContext):
     if age.lower().startswith("/"):
         age = None
     await state.update_data(age=age)
+    await state.set_state(AdForm.pet_name)
+    await message.answer(
+        "Как зовут животное? (кличка)\n"
+        "Если не знаете — отправьте /skip."
+    )
+
+
+@router.message(AdForm.pet_name)
+async def step_pet_name(message: Message, state: FSMContext):
+    pet_name = message.text.strip()
+    if pet_name.lower().startswith("/"):
+        pet_name = None
+    await state.update_data(pet_name=pet_name)
     await state.set_state(AdForm.district)
     await message.answer("Выберите район:", reply_markup=district_kb())
 
@@ -341,6 +358,20 @@ async def step_location_detail(message: Message, state: FSMContext):
 @router.message(AdForm.event_date)
 async def step_event_date(message: Message, state: FSMContext):
     await state.update_data(event_date=message.text.strip())
+    await state.set_state(AdForm.comment)
+    await message.answer(
+        "Хотите добавить комментарий? Что угодно — "
+        "особые приметы, обстоятельства, награда и т.п.\n\n"
+        "Отправьте /skip, если нечего добавить."
+    )
+
+
+@router.message(AdForm.comment)
+async def step_comment(message: Message, state: FSMContext):
+    comment = message.text.strip()
+    if comment.lower().startswith("/"):
+        comment = None
+    await state.update_data(comment=comment)
     await state.set_state(AdForm.contact)
     await message.answer(
         "Как с вами связаться? Выберите, что показать в объявлении:",
