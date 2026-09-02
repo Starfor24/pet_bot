@@ -9,6 +9,7 @@
   3. Карточка уходит модератору с кнопками «Опубликовать» / «Отклонить».
   4. После одобрения бот постит карточку в канал.
   5. Кнопка «Найдено / Вернулся домой» закрывает объявление.
+  6. /search — поиск по доске.
 
 Запуск:
   pip install -q aiogram aiosqlite
@@ -69,7 +70,6 @@ class AdForm(StatesGroup):
     location_detail = State()
     event_date = State()
     contact = State()
-    confirm = State()
 
 
 class SearchForm(StatesGroup):
@@ -86,6 +86,7 @@ class SearchForm(StatesGroup):
 MAIN_KB = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="🔴 Потерялся"), KeyboardButton(text="🟢 Нашёлся")],
+        [KeyboardButton(text="🔍 Поиск по доске")],
     ],
     resize_keyboard=True,
 )
@@ -106,6 +107,16 @@ SEX_KB = InlineKeyboardMarkup(
             InlineKeyboardButton(text="♂ Мальчик", callback_data="sex:male"),
             InlineKeyboardButton(text="♀ Девочка", callback_data="sex:female"),
             InlineKeyboardButton(text="Не знаю", callback_data="sex:unknown"),
+        ]
+    ]
+)
+
+SEARCH_KIND_KB = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🔴 Потерялся", callback_data="skind:lost"),
+            InlineKeyboardButton(text="🟢 Нашёлся", callback_data="skind:found"),
+            InlineKeyboardButton(text="Все", callback_data="skind:all"),
         ]
     ]
 )
@@ -353,7 +364,6 @@ async def step_contact(cq: CallbackQuery, state: FSMContext):
         )
         await state.set_state(AdForm.contact)
     else:
-        # phone или both — просим ввести телефон текстом
         await cq.message.answer(
             "Напишите номер телефона (он будет показан в объявлении).\n"
             "Если хотите добавить ещё и @username — напишите его после "
@@ -395,12 +405,10 @@ async def finish_form(source, state: FSMContext):
     await source.message.answer(preview, reply_markup=MAIN_KB)
     await state.clear()
 
-    # --- уведомление модераторам ---
     for admin_id in config.ADMIN_IDS:
         try:
             photos = data.get("photos", [])
             if photos:
-                media = [{"type": "photo", "media": photos[0]}]
                 await bot.send_photo(
                     admin_id,
                     photos[0],
@@ -435,7 +443,8 @@ async def approve(cq: CallbackQuery):
         await cq.answer("Объявление уже обработано", show_alert=True)
         return
 
-    text = build_card_text(ad) + f"\n\n📩 Подать объявление: @{config.BOT_USERNAME}" if config.BOT_USERNAME else build_card_text(ad)
+    bot_suffix = f"\n\n📩 Подать объявление: @{config.BOT_USERNAME}" if config.BOT_USERNAME else ""
+    text = build_card_text(ad) + bot_suffix
 
     close_kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -501,7 +510,6 @@ async def close_ad(cq: CallbackQuery):
         await cq.answer("Объявление не найдено", show_alert=True)
         return
 
-    # Закрыть может автор объявления или модератор
     if cq.from_user.id != ad["author_id"] and not is_admin(cq.from_user.id):
         await cq.answer("⛔ Только автор или модератор", show_alert=True)
         return
@@ -518,16 +526,6 @@ async def close_ad(cq: CallbackQuery):
 # --------------------------------------------------------------------------- #
 # Поиск по доске
 # --------------------------------------------------------------------------- #
-
-SEARCH_KIND_KB = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [
-            InlineKeyboardButton(text="🔴 Потерялся", callback_data="skind:lost"),
-            InlineKeyboardButton(text="🟢 Нашёлся", callback_data="skind:found"),
-            InlineKeyboardButton(text="Все", callback_data="skind:all"),
-        ]
-    ]
-)
 
 
 @router.message(F.text == "🔍 Поиск по доске")
@@ -550,7 +548,7 @@ async def search_start(message: Message, state: FSMContext):
 
 @router.callback_query(SearchForm.kind, F.data.startswith("skind:"))
 async def search_kind(cq: CallbackQuery, state: FSMContext):
-    kind = cq.data.split(":")[1]  # lost / found / all
+    kind = cq.data.split(":")[1]
     await state.update_data(kind=None if kind == "all" else kind)
     await state.set_state(SearchForm.animal_type)
     await cq.answer()
